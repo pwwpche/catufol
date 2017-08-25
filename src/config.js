@@ -22,7 +22,8 @@ function Configuration(json) {
       exportJQuery: !!json.exportJQuery,
       karmaFiles: json.karmaFiles || [],
       useTemplateUrl: !!json.useTemplateUrl,
-      enableAOT: !!json.enableAOT
+      enableAOT: !!json.enableAOT,
+      tsConfigAOT: json.tsConfigAOT || "./tsconfig.aot.js"
     };
   };
   this.buildPath = function () {
@@ -60,15 +61,23 @@ Configuration.prototype.wpRunBase = function () {
   const conf = this.json();
   const base = this.wpBase();
   base.entry = {
-    app: [],
     vendor: conf.vendors
   };
   base.output = {
     path: path.resolve(pwd, conf.buildPath),
-    filename: `${conf.appName}/bundles/bundle.[hash].js`,
+    filename: `${conf.appName}/bundles/bundle.js`,
     sourceMapFilename: '[file].map',
     publicPath: '/'
   };
+  if (conf.enableAOT) {
+    base.plugins.push(new AotPlugin({
+      tsConfigPath: path.resolve(pwd, conf.tsConfigAOT),
+      entryModule: path.resolve(pwd, '/app/app.module#AppModule')
+    }));
+    base.entry.app = [conf.aotEntryFile];
+  }else{
+    base.entry.app = [conf.devEntryFile];
+  }
   base.module.rules.push(wp.preRules.tslint);
   base.module.rules.push(wp.rules.raw);
   base.module.rules.push(wp.rules.jpg);
@@ -83,7 +92,6 @@ Configuration.prototype.wpBuild = function () {
   const conf = this.json();
   const base = this.wpRunBase();
   base.devtool = wp.devtool.cheapModuleMap;
-  base.entry.app.push(conf.prodEntryFile);
 
   base.plugins.push(new webpack.DefinePlugin({
     'process.env.NODE_ENV': '"production"'
@@ -91,12 +99,6 @@ Configuration.prototype.wpBuild = function () {
   base.plugins.push(new HtmlWebpackPlugin(
       {filename: 'index.html', template: './app/index.html'}));
 
-  if (conf.enableAOT) {
-    base.plugins.push(new AotPlugin({
-      tsConfigPath: path.resolve(pwd, 'tsconfig.aot.json'),
-      entryModule: path.resolve(pwd, 'app/app.module#AppModule')
-    }));
-  }
   const method = conf.enableAOT ? "aot" : (conf.useTemplateUrl ? "template"
       : "");
   this.getConfig(method, ['ts', 'html', 'less', 'scss', 'css'])
@@ -124,28 +126,23 @@ Configuration.prototype.wpBuild = function () {
 
   base.plugins.push(new webpack.optimize.ModuleConcatenationPlugin());
   return base;
-}
+};
 
 Configuration.prototype.wpRun = function () {
   const conf = this.json();
   const base = this.wpRunBase();
+  base.devtool = wp.devtool.inlineMap;
+  base.entry.app = ['webpack/hot/dev-server',
+    `webpack-dev-server/client?http://localhost:${this.wpPort()}`]
+      .concat(base.entry.app);
+
   const method = conf.enableAOT ? "aot" : (conf.useTemplateUrl ? "template"
       : "");
   this.getConfig(method, ['ts', 'html', 'less', 'scss', 'css'])
       .forEach(function (rule) {
         base.module.rules.push(rule);
       });
-  if (conf.enableAOT) {
-    base.plugins.push(new AotPlugin({
-      tsConfigPath: path.resolve(pwd, 'tsconfig.aot.json'),
-      entryModule: path.resolve(pwd, 'app/app.module#AppModule')
-    }));
-  }
-  base.devtool = wp.devtool.inlineMap;
-  base.entry.app.push('webpack/hot/dev-server');
-  base.entry.app.push(
-      `webpack-dev-server/client?http://localhost:${this.wpPort()}`);
-  base.entry.app.push(conf.devEntryFile);
+
   base.plugins.push(new webpack.HotModuleReplacementPlugin());
   base.plugins.push(new HtmlWebpackPlugin(
       {filename: 'index.html', template: './app/index.html'}));
@@ -163,8 +160,7 @@ Configuration.prototype.wpTestBase = function () {
   const base = this.wpBase();
   const conf = this.json();
   base.devtool = wp.devtool.inlineMap;
-  const method = conf.enableAOT ? "aot" : (conf.useTemplateUrl ? "template"
-      : "");
+  const method = conf.useTemplateUrl ? "template" : "";
   this.getConfig(method, ['html', 'less', 'css'])
       .forEach(function (rule) {
         base.module.rules.push(rule);
@@ -178,8 +174,7 @@ Configuration.prototype.wpTest = function () {
   const base = this.wpTestBase();
   const conf = this.json();
   base.module.rules.push(wp.preRules.tslint);
-  const method = conf.enableAOT ? "aot" : (conf.useTemplateUrl ? "template"
-      : "");
+  const method = conf.useTemplateUrl ? "template" : "";
   this.getConfig(method, ['tsWithComments'])
       .forEach(function (rule) {
         base.module.rules.push(rule);
@@ -192,8 +187,7 @@ Configuration.prototype.wpDebug = function () {
   const base = this.wpTestBase();
   const conf = this.json();
   base.devtool = wp.devtool.inlineMap;
-  const method = conf.enableAOT ? "aot" : (conf.useTemplateUrl ? "template"
-      : "");
+  const method = conf.useTemplateUrl ? "template" : "";
   this.getConfig(method, ['tsNoComments'])
       .forEach(function (rule) {
         base.module.rules.push(rule);

@@ -36,7 +36,10 @@ const postRules = {
       /\.spec\.ts$/,
       /app\/domain\/services\/testing/,
       /node_modules/
-    ]
+    ],
+    options: {
+      esModules: true
+    }
   }
 };
 
@@ -181,9 +184,9 @@ const rules = {
   less: {
     test: /\.less$/,
     use: [
-        'style-loader',
-        'css-loader',
-        'less-loader'
+      'style-loader',
+      'css-loader',
+      'less-loader'
     ]
   },
   scss: {
