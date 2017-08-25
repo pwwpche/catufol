@@ -3,7 +3,7 @@
 Catùfol
 =======
 
-A helper tool on the top of Webpack, Karma, TypeScript and other tools that helps to reduce configuration
+A helper tool on the top of Webpack3, Karma, TypeScript and other tools that helps to reduce configuration
 steps. The tool will try to work with a minimum of configuration and will use conventions and other project files
 to extract configuration settings whenever it's possible.
 
@@ -24,6 +24,7 @@ configuration settings, as a trade off, we need to follow some conventions on ho
 yourApp/
 ├── app/                     // Here goes all your app code
 │   ├── main.ts              // Your entry point file for Webpack
+│   ├── main.aot.ts          // Your entry point file for Webpack with Ahead-of-Time build (optional)
 │   ├── helloTest.spec.ts    // Test files are expected to have the extension .spec.ts
 │   └── index.html           // This is the HTML template used to generate the final index.html on your build
 ├── coverage/                // Generated folder. Coverage reports will be created here
@@ -34,7 +35,8 @@ yourApp/
 ├── package.json             // NPM configuration file
 ├── typings.json             // Typings configuration file
 ├── test.loader.json         // Karma entry point
-└── tsconfig.json            // Configuration for the Typescript compiler
+├── tsconfig.json            // Configuration for the Typescript compiler
+└── tsconfig.aot.json        // Configuration for the Angular compiler (optional)
 ```
 
 * `app` contains all the source files, including tests
@@ -81,10 +83,31 @@ You may want to add a configuration file `catufol.json`:
   ],
   "devEntryFile": "./app/main.ts",        // It will default to ./app/main.ts if not provided
   "prodEntryFile": "./app/main-build.ts", // It will default to ./app/main.ts if not provided,
+  "aotEntryFile": "./app/main.aot.ts",    // It will default to ./app/main.aot.ts if not provided,
   "karmaFiles": [/* ... */]               // This can be used to insert files in the files configuration for Karma.
                                           // If you need any.By default catufol will load some needed files.
+  "useTemplateUrl": false,                // If you are using "templateUrl" and "styleUrls" in @Component, set this to true.
+  "enableAOT": false                      // If you want to run or build with Angular Ahead-of-Time compile
 }
 ```
+
+**Notice**:
+
+* Angular can load component template and style from a resource file. This is achieved by using 
+`@Component({styleUrls: [...file...], templateUrl: "file.html"})`, instead of the `require(...)`
+statements that are more widely used. Webpack needs a special `angular2-template-loader` to load
+these resources. So set `useTemplateUrl` to `true` if you are using this method to load your templates.
+
+* `enableAOT` does not work in Test mode, which means you can't test your AOT build. This is because 
+AOT and JIT build works on different Jasmine test loaders. However, there's not much use case on 
+testing AOT builds, since it shares every file except for the entry file as JIT build.
+ 
+* `enableAOT` will _override_  `useTemplateUrl`. If you want to both develop and build with JIT, 
+ just set `useTemplateUrl` to `true`. And you can just set `enableAOT` to `true` if you want to 
+ do both in AOT mode. If you want to build with AOT and develop with JIT:
+  * Use `{"useTemplateUrl": true}` when developing.
+  * Use `{"enableAOT": true}` when building. 
+
 
 It may be helpful to add some scripts to your `package.json` file:
 ```
