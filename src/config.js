@@ -23,7 +23,7 @@ function Configuration(json) {
       karmaFiles: json.karmaFiles || [],
       useTemplateUrl: !!json.useTemplateUrl,
       enableAOT: !!json.enableAOT,
-      tsConfigAOT: json.tsConfigAOT || "./tsconfig.aot.js"
+      tsConfigAOT: json.tsConfigAOT || "./tsconfig.aot.json"
     };
   };
   this.buildPath = function () {
@@ -65,7 +65,7 @@ Configuration.prototype.wpRunBase = function () {
   };
   base.output = {
     path: path.resolve(pwd, conf.buildPath),
-    filename: `${conf.appName}/bundles/bundle.js`,
+    filename: `${conf.appName}/bundles/bundle.[hash].js`,
     sourceMapFilename: '[file].map',
     publicPath: '/'
   };
