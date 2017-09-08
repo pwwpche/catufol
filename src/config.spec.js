@@ -39,11 +39,16 @@ describe('Configuration', () => {
       enableAOT: false
     };
     const conf = new Conf(source);
-    const bases = [conf.wpRun(), conf.wpBuild()];
+    const runbase = conf.wpRun();
+    const buildbase = conf.wpBuild();
+    const bases = [runbase, buildbase];
+    expect(runbase.entry.app).toContain('dev-file');
+    expect(runbase.entry.app).not.toContain('prod-file');
+    expect(buildbase.entry.app).toContain('prod-file');
+    expect(buildbase.entry.app).not.toContain('dev-file');
+
     bases.forEach(base => {
-      expect(base.entry.app).toContain("dev-file");
       expect(base.entry.app).not.toContain("aot-file");
-      expect(base.entry.app).not.toContain("prod-file");
       expect(JSON.stringify(base.module.rules)
               .indexOf("angular2-template-loader") !== -1).toBe(true);
       expect(JSON.stringify(base.module.rules)
@@ -52,6 +57,10 @@ describe('Configuration', () => {
   });
 
   it('Should use ngtools/webpack when enableAOT', () => {
+
+    // tsConfigAOT: 'package.json':
+    // package.json is not a typescript config file. It is added because the AOT
+    // plugin '@ngtools/webpack' needs a file to initialize itself.
     const source = {
       appName: 'a',
       vendors: ['b', 'c'],
@@ -63,11 +72,15 @@ describe('Configuration', () => {
       tsConfigAOT: 'package.json'
     };
     const conf = new Conf(source);
-    const bases = [conf.wpRun(), conf.wpBuild()];
+    const runbase = conf.wpRun();
+    const buildbase = conf.wpBuild();
+    const bases = [runbase, buildbase];
+
     bases.forEach(base => {
-      expect(base.entry.app).toContain("aot-file");
+      expect(base.entry.app).toContain('aot-file');
+      expect(base.entry.app).not.toContain('prod-file');
       expect(base.entry.app).not.toContain("dev-file");
-      expect(base.entry.app).not.toContain("prod-file");
+
       expect(JSON.stringify(base.module.rules)
               .indexOf("angular2-template-loader") === -1).toBe(true);
       expect(JSON.stringify(base.module.rules)
@@ -76,7 +89,7 @@ describe('Configuration', () => {
   });
 
 
-  it('Should not ngtools/webpack when running tests', () => {
+  it('Should not contain @ngtools/webpack when running tests', () => {
     const source = {
       appName: 'a',
       vendors: ['b', 'c'],
@@ -98,7 +111,6 @@ describe('Configuration', () => {
   it('ExportJQuery should be false by default', () => {
     const source = {appName: 'a', vendors: ['b', 'c'], entryFile: 'e'};
     const conf = new Conf(source);
-
     expect(conf.json().exportJQuery).toBe(false)
   });
 

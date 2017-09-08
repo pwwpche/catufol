@@ -59,20 +59,13 @@ const aot_build_rules = {
       'less-loader'
     ]
   },
-  scss: {
-    test: /\.scss/,
-    use: [
-      'raw-loader',
-      'sass-loader'
-    ]
-  },
   css: {
     test: /\.css$/,
     use: [
       'raw-loader',
       'css-loader'
     ]
-  },
+  }
 };
 
 const template_run_rules = {
@@ -126,13 +119,6 @@ const template_run_rules = {
       'less-loader'
     ]
   },
-  scss: {
-    test: /\.scss/,
-    use: [
-      'raw-loader',
-      'sass-loader'
-    ]
-  },
   css: {
     test: /\.css$/,
     use: [
@@ -152,13 +138,21 @@ const rules = {
   tsWithComments: {
     test: /\.ts$/,
     loader: 'ts-loader',
-    query: {"compilerOptions": {"removeComments": false}},
+    options: {
+      compilerOptions: {
+        removeComments: false
+      }
+    },
     exclude: [nModules]
   },
   tsNoComments: {
     test: /\.ts$/,
     loader: 'ts-loader',
-    query: {"compilerOptions": {"removeComments": true}},
+    options: {
+      compilerOptions: {
+        removeComments: true
+      }
+    },
     exclude: [nModules]
   },
   html: {

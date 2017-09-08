@@ -7,8 +7,7 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const wp = require('./wpTools');
 const karma = require('./karmaTools');
 const AotPlugin = require('@ngtools/webpack').AotPlugin;
-const BundleAnalyzerPlugin = require(
-    'webpack-bundle-analyzer').BundleAnalyzerPlugin;
+const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 
 function Configuration(json) {
   this.json = function () {
@@ -23,6 +22,7 @@ function Configuration(json) {
       karmaFiles: json.karmaFiles || [],
       useTemplateUrl: !!json.useTemplateUrl,
       enableAOT: !!json.enableAOT,
+      enableAnalyzer: !!json.enableAnalyzer,
       tsConfigAOT: json.tsConfigAOT || "./tsconfig.aot.json"
     };
   };
@@ -32,21 +32,29 @@ function Configuration(json) {
   this.wpPort = function () {
     return json.devServerPort || 8080;
   };
-  this.getConfig = function (method, keys) {
-    const conf = "aot" === method ? wp.aot_build_rules : "template" === method
-        ? wp.template_run_rules : wp.rules;
-    return keys.filter( key => key in conf ).map( key => conf[key] );
+  this.getRules = function (method, keys) {
+    let conf = {};
+    if ("aot" === method) {
+      conf = wp.aot_build_rules;
+    } else if ("template" === method) {
+      conf = wp.template_run_rules;
+    } else {
+      conf = wp.rules;
+    }
+    return keys.filter( key => key in conf ).map( key => conf[key]);
   }
 }
 
 Configuration.prototype.wpBase = function () {
   const plugins = [];
+  const providePluginOptions = new webpack.ProvidePlugin({
+    $: "jquery",
+    jQuery: "jquery",
+    "window.jQuery": "jquery"
+  });
+
   if (this.json().exportJQuery) {
-    plugins.push(new webpack.ProvidePlugin({
-      $: "jquery",
-      jQuery: "jquery",
-      "window.jQuery": "jquery"
-    }));
+    plugins.push(providePluginOptions);
   }
   return {
     plugins: plugins,
@@ -60,6 +68,7 @@ Configuration.prototype.wpBase = function () {
 Configuration.prototype.wpRunBase = function () {
   const conf = this.json();
   const base = this.wpBase();
+
   base.entry = {
     vendor: conf.vendors
   };
@@ -70,14 +79,16 @@ Configuration.prototype.wpRunBase = function () {
     publicPath: '/'
   };
   if (conf.enableAOT) {
-    base.plugins.push(new AotPlugin({
+    const aotPluginOptions = new AotPlugin({
       tsConfigPath: path.resolve(pwd, conf.tsConfigAOT),
       entryModule: path.resolve(pwd, '/app/app.module#AppModule')
-    }));
+    });
+    base.plugins.push(aotPluginOptions);
     base.entry.app = [conf.aotEntryFile];
-  }else{
+  } else {
     base.entry.app = [conf.devEntryFile];
   }
+  
   base.module.rules.push(wp.preRules.tslint);
   base.module.rules.push(wp.rules.raw);
   base.module.rules.push(wp.rules.jpg);
@@ -91,22 +102,18 @@ Configuration.prototype.wpRunBase = function () {
 Configuration.prototype.wpBuild = function () {
   const conf = this.json();
   const base = this.wpRunBase();
-  base.devtool = wp.devtool.cheapModuleMap;
+  const templateResolutionMethod = conf.useTemplateUrl ? "template" : "";
+  const method = conf.enableAOT ? "aot" : templateResolutionMethod;
+  const rules = this.getRules(method, ['ts', 'html', 'less', 'scss', 'css']);
 
-  base.plugins.push(new webpack.DefinePlugin({
+  const definePluginOptions = new webpack.DefinePlugin({
     'process.env.NODE_ENV': '"production"'
-  }));
-  base.plugins.push(new HtmlWebpackPlugin(
-      {filename: 'index.html', template: './app/index.html'}));
-
-  const method = conf.enableAOT ? "aot" : (conf.useTemplateUrl ? "template"
-      : "");
-  this.getConfig(method, ['ts', 'html', 'less', 'scss', 'css'])
-      .forEach(function (rule) {
-        base.module.rules.push(rule);
-      });
-
-  base.plugins.push(new webpack.optimize.UglifyJsPlugin({
+  });
+  const htmlPluginOptions = new HtmlWebpackPlugin({
+    filename: 'index.html',
+    template: './app/index.html'
+  });
+  const uglifyJsPluginOptions = new webpack.optimize.UglifyJsPlugin({
     sourceMap: true,
     mangle: true,
     compress: {
@@ -115,41 +122,58 @@ Configuration.prototype.wpBuild = function () {
       unsafe: true
     },
     output: {
-      comments: false,
+      comments: false
     },
     minimize: true
-  }));
-  base.plugins.push(new webpack.optimize.CommonsChunkPlugin({
+  });
+  const commonsChunkPluginOptions = new webpack.optimize.CommonsChunkPlugin({
     name: 'vendor',
     filename: `${conf.appName}/bundles/vendor.bundle.[hash].js`
-  }));
+  });
 
+  if(!conf.enableAOT){
+    base.entry.app = [conf.prodEntryFile];
+  }
+  base.devtool = wp.devtool.cheapModuleMap;
+  base.module.rules = base.module.rules.concat(rules);
+
+  base.plugins.push(definePluginOptions);
+  base.plugins.push(htmlPluginOptions);
+  base.plugins.push(uglifyJsPluginOptions);
+  base.plugins.push(commonsChunkPluginOptions);
   base.plugins.push(new webpack.optimize.ModuleConcatenationPlugin());
+  if (conf.enableAnalyzer) {
+    base.plugins.push(new BundleAnalyzerPlugin());
+  }
   return base;
 };
 
 Configuration.prototype.wpRun = function () {
   const conf = this.json();
   const base = this.wpRunBase();
-  base.devtool = wp.devtool.inlineMap;
-  base.entry.app = ['webpack/hot/dev-server',
-    `webpack-dev-server/client?http://localhost:${this.wpPort()}`]
-      .concat(base.entry.app);
 
-  const method = conf.enableAOT ? "aot" : (conf.useTemplateUrl ? "template"
-      : "");
-  this.getConfig(method, ['ts', 'html', 'less', 'scss', 'css'])
-      .forEach(function (rule) {
-        base.module.rules.push(rule);
-      });
+  const templateUrlMethod = conf.useTemplateUrl ? "template" : "";
+  const method = conf.enableAOT ? "aot" : templateUrlMethod;
+  const rules = this.getRules(method, ['ts', 'html', 'less', 'css']);
 
-  base.plugins.push(new webpack.HotModuleReplacementPlugin());
-  base.plugins.push(new HtmlWebpackPlugin(
-      {filename: 'index.html', template: './app/index.html'}));
-  base.plugins.push(new webpack.optimize.CommonsChunkPlugin({
+  const webpackServer = ['webpack/hot/dev-server',
+    `webpack-dev-server/client?http://localhost:${this.wpPort()}`];
+  const commonsChunkPluginOptions = new webpack.optimize.CommonsChunkPlugin({
     name: 'vendor',
     filename: `${conf.appName}/bundles/vendor.bundle.js`
-  }));
+  });
+  const htmlWebpackPluginOptions = new HtmlWebpackPlugin({
+    filename: 'index.html',
+    template: './app/index.html'
+  });
+
+
+  base.devtool = wp.devtool.inlineMap;
+  base.entry.app = webpackServer.concat(base.entry.app);
+  base.module.rules = base.module.rules.concat(rules);
+  base.plugins.push(new webpack.HotModuleReplacementPlugin());
+  base.plugins.push(htmlWebpackPluginOptions);
+  base.plugins.push(commonsChunkPluginOptions);
   base.plugins.push(new webpack.LoaderOptionsPlugin({
     debug: true
   }));
@@ -159,12 +183,11 @@ Configuration.prototype.wpRun = function () {
 Configuration.prototype.wpTestBase = function () {
   const base = this.wpBase();
   const conf = this.json();
-  base.devtool = wp.devtool.inlineMap;
   const method = conf.useTemplateUrl ? "template" : "";
-  this.getConfig(method, ['html', 'less', 'css'])
-      .forEach(function (rule) {
-        base.module.rules.push(rule);
-      });
+  const rules = this.getRules(method, ['html', 'less', 'css']);
+
+  base.devtool = wp.devtool.inlineMap;
+  base.module.rules = base.module.rules.concat(rules);
   base.module.rules.push(wp.rules.raw);
   base.module.rules.push(wp.rules.styleNullLoader);
   return base;
@@ -173,12 +196,10 @@ Configuration.prototype.wpTestBase = function () {
 Configuration.prototype.wpTest = function () {
   const base = this.wpTestBase();
   const conf = this.json();
-  base.module.rules.push(wp.preRules.tslint);
   const method = conf.useTemplateUrl ? "template" : "";
-  this.getConfig(method, ['tsWithComments'])
-      .forEach(function (rule) {
-        base.module.rules.push(rule);
-      });
+  const rules = this.getRules(method, ['tsWithComments']);
+  base.module.rules.push(wp.preRules.tslint);
+  base.module.rules = base.module.rules.concat(rules);
   base.module.rules.push(wp.postRules.istanbul);
   return base;
 };
@@ -186,12 +207,11 @@ Configuration.prototype.wpTest = function () {
 Configuration.prototype.wpDebug = function () {
   const base = this.wpTestBase();
   const conf = this.json();
-  base.devtool = wp.devtool.inlineMap;
   const method = conf.useTemplateUrl ? "template" : "";
-  this.getConfig(method, ['tsNoComments'])
-      .forEach(function (rule) {
-        base.module.rules.push(rule);
-      });
+  const rules = this.getRules(method, ['tsNoComments']);
+
+  base.devtool = wp.devtool.inlineMap;
+  base.module.rules = base.module.rules.concat(rules);
   return base;
 };
 
@@ -225,8 +245,7 @@ Configuration.prototype.karmaHeadless = function () {
   base.customLaunchers = {
     ChromeHeadless: {
       base: 'Chrome',
-      flags: ['--headless', '--disable-gpu', '--remote-debugging-port=9222',
-        '-incognito']
+      flags: ['--headless', '--disable-gpu', '--remote-debugging-port=9222', '-incognito']
     }
   };
   base.singleRun = true;
